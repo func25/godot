@@ -78,6 +78,9 @@ __attribute__((visibility("default"))) int main(int argc, char **argv) {
 		if (strcmp("--embedded", argv[i]) == 0) {
 			is_embedded = true;
 		}
+		if (strcmp("--background", argv[i]) == 0) {
+			godot_background_mode = true;
+		}
 		for (size_t j = 0; j < std::size(OS_MacOS::headless_args); j++) {
 			if (strcmp(OS_MacOS::headless_args[j], argv[i]) == 0) {
 				is_headless = true;

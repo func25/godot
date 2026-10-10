@@ -36,6 +36,10 @@
 
 @class GodotApplicationDelegate;
 
+// `--background`: never activate the app and open windows behind other apps, so automated runs
+// (screenshots, movie capture) don't steal focus. Set in main() before the app object exists.
+extern bool godot_background_mode;
+
 @interface GodotApplication : NSApplication
 
 extern "C" GodotApplication *GodotApp;

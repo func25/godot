@@ -35,6 +35,7 @@
 #import "os_macos.h"
 
 GodotApplication *GodotApp = nil;
+bool godot_background_mode = false;
 
 @interface GodotApplication ()
 - (void)forceUnbundledWindowActivationHackStep1;
@@ -57,6 +58,9 @@ GodotApplication *GodotApp = nil;
 }
 
 - (void)activateApplication {
+	if (godot_background_mode) {
+		return;
+	}
 	[NSApp activateIgnoringOtherApps:YES];
 	NSString *nsappname = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleName"];
 	const char *bundled_id = getenv("__CFBundleIdentifier");

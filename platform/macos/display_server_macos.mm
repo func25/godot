@@ -1722,6 +1722,8 @@ void DisplayServerMacOS::show_window(DisplayServerEnums::WindowID p_id) {
 	popup_open(p_id);
 	if ([wd.window_object isMiniaturized]) {
 		return;
+	} else if (godot_background_mode) {
+		[wd.window_object orderBack:nil];
 	} else if (wd.no_focus) {
 		if (wd.transient_parent != DisplayServerEnums::INVALID_WINDOW_ID) {
 			WindowData &wd_parent = windows[wd.transient_parent];
