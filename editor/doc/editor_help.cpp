@@ -3098,7 +3098,9 @@ void EditorHelp::load_script_doc_cache() {
 		return;
 	}
 
-	if (EditorNode::is_cmdline_mode()) {
+	// This runs deferred from the doc threads. When the editor quits right after startup (e.g. `--import`),
+	// the call can be flushed after EditorNode is already freed: skip it, the editor is shutting down.
+	if (!EditorNode::get_singleton() || EditorNode::is_cmdline_mode()) {
 		return;
 	}
 
@@ -3167,6 +3169,11 @@ static void _regenerate_script_doc_cache(bool p_changes) {
 }
 
 void EditorHelp::regenerate_script_doc_cache() {
+	// Also reached deferred (corrupted cache); after EditorNode is freed the filesystem is gone.
+	if (!EditorNode::get_singleton()) {
+		return;
+	}
+
 	if (EditorFileSystem::get_singleton()->is_scanning()) {
 		// Wait until EditorFileSystem scanning is complete to use updated filesystem structure.
 		EditorFileSystem::get_singleton()->connect(SNAME("sources_changed"), callable_mp_static(_regenerate_script_doc_cache), CONNECT_ONE_SHOT);
