@@ -1399,13 +1399,15 @@ GDScript::UpdatableFuncPtr::UpdatableFuncPtr(GDScriptFunction *p_function) {
 }
 
 GDScript::UpdatableFuncPtr::~UpdatableFuncPtr() {
+	if (list_element == nullptr) {
+		// Never registered, or detached by `~GDScript()` because the script died first.
+		return;
+	}
 	ERR_FAIL_NULL(script);
 
-	if (list_element) {
-		MutexLock script_lock(script->func_ptrs_to_update_mutex);
-		list_element->erase();
-		list_element = nullptr;
-	}
+	MutexLock script_lock(script->func_ptrs_to_update_mutex);
+	list_element->erase();
+	list_element = nullptr;
 }
 
 void GDScript::_recurse_replace_function_ptrs(const HashMap<GDScriptFunction *, GDScriptFunction *> &p_replacements) const {
@@ -1520,6 +1522,16 @@ GDScript::~GDScript() {
 	}
 
 	clear();
+
+	// Lambda callables may outlive this script (e.g. a `self` lambda whose `self` held the last reference to it).
+	// Detach them, so their `~UpdatableFuncPtr()` does not lock `func_ptrs_to_update_mutex` after it is destroyed.
+	MutexLock lock(func_ptrs_to_update_mutex);
+	for (UpdatableFuncPtr *updatable : func_ptrs_to_update) {
+		updatable->ptr = nullptr;
+		updatable->script = nullptr;
+		updatable->list_element = nullptr;
+	}
+	func_ptrs_to_update.clear();
 }
 
 //////////////////////////////
