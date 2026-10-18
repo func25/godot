@@ -303,6 +303,54 @@ AudioDriver::SpeakerMode AudioDriverCoreAudio::get_speaker_mode() const {
 	return get_speaker_mode_by_total_channels(channels);
 }
 
+// Time from the start of a mixed buffer until it is heard, read from the current output route on every call
+// (so a route change, e.g. plugging in headphones or a Bluetooth speaker, is picked up without a listener).
+float AudioDriverCoreAudio::get_latency() {
+#ifdef MACOS_ENABLED
+	if (audio_unit == nullptr) {
+		return 0;
+	}
+	AudioDeviceID device_id = kAudioObjectUnknown;
+	UInt32 size = sizeof(device_id);
+	if (AudioUnitGetProperty(audio_unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, kOutputBus, &device_id, &size) != noErr) {
+		return 0;
+	}
+	// Apple's total output latency: device latency + safety offset + I/O buffer + latency of the output stream, in frames.
+	UInt32 frames = 0;
+	const AudioObjectPropertySelector selectors[] = { kAudioDevicePropertyLatency, kAudioDevicePropertySafetyOffset, kAudioDevicePropertyBufferFrameSize };
+	for (AudioObjectPropertySelector selector : selectors) {
+		AudioObjectPropertyAddress prop = { selector, kAudioObjectPropertyScopeOutput, kAudioObjectPropertyElementMain };
+		UInt32 value = 0;
+		size = sizeof(value);
+		if (AudioObjectGetPropertyData(device_id, &prop, 0, nullptr, &size, &value) == noErr) {
+			frames += value;
+		}
+	}
+	AudioObjectPropertyAddress streams_prop = { kAudioDevicePropertyStreams, kAudioObjectPropertyScopeOutput, kAudioObjectPropertyElementMain };
+	AudioStreamID stream_id = kAudioObjectUnknown;
+	size = sizeof(stream_id);
+	if (AudioObjectGetPropertyData(device_id, &streams_prop, 0, nullptr, &size, &stream_id) == noErr && size == sizeof(stream_id)) {
+		AudioObjectPropertyAddress prop = { kAudioStreamPropertyLatency, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain };
+		UInt32 value = 0;
+		size = sizeof(value);
+		if (AudioObjectGetPropertyData(stream_id, &prop, 0, nullptr, &size, &value) == noErr) {
+			frames += value;
+		}
+	}
+	Float64 rate = 0;
+	AudioObjectPropertyAddress rate_prop = { kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain };
+	size = sizeof(rate);
+	if (AudioObjectGetPropertyData(device_id, &rate_prop, 0, nullptr, &size, &rate) != noErr || rate <= 0) {
+		rate = mix_rate;
+	}
+	return rate > 0 ? frames / rate : 0;
+#else
+	// Hardware latency of the current route (built-in speaker, wired or Bluetooth headphones) plus one I/O buffer.
+	AVAudioSession *session = [AVAudioSession sharedInstance];
+	return session.outputLatency + session.IOBufferDuration;
+#endif
+}
+
 void AudioDriverCoreAudio::lock() {
 	mutex.lock();
 }

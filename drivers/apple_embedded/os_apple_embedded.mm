@@ -246,6 +246,10 @@ void OS_AppleEmbedded::start() {
 }
 
 void OS_AppleEmbedded::finalize() {
+#ifdef COREMIDI_ENABLED
+	midi_driver.close();
+#endif
+
 	deinitialize_modules();
 
 	// Already gets called

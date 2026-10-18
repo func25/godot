@@ -99,6 +99,7 @@ public:
 	virtual int get_mix_rate() const override;
 	virtual int get_input_mix_rate() const override;
 	virtual SpeakerMode get_speaker_mode() const override;
+	virtual float get_latency() override;
 
 	virtual void lock() override;
 	virtual void unlock() override;

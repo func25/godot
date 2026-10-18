@@ -34,6 +34,7 @@
 
 #import "drivers/apple_embedded/apple_embedded.h"
 #import "drivers/coreaudio/audio_driver_coreaudio.h"
+#import "drivers/coremidi/midi_driver_coremidi.h"
 #include "drivers/unix/os_unix.h"
 #include "servers/audio/audio_server.h"
 #include "servers/rendering/renderer_compositor.h"
@@ -54,6 +55,10 @@ private:
 	friend void register_dynamic_symbol(char *name, void *address);
 
 	AudioDriverCoreAudio audio_driver;
+
+#ifdef COREMIDI_ENABLED
+	MIDIDriverCoreMidi midi_driver;
+#endif
 
 	AppleEmbedded *apple_embedded = nullptr;
 

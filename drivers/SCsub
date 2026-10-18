@@ -38,7 +38,7 @@ if env["accesskit"] and env["platform"] in ["macos", "windows", "linuxbsd"]:
 
 # Midi drivers
 SConscript("alsamidi/SCsub")
-if env["platform"] in ["macos"]:
+if env["platform"] in ["macos", "ios"]:
     SConscript("coremidi/SCsub")
 SConscript("winmidi/SCsub")
 
