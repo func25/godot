@@ -2263,7 +2263,14 @@ void GDScriptLanguage::finish() {
 			while (script->instances.first() != nullptr) {
 				// Turns instances into core objects that can outlive `GDScriptLanguage`.
 				const SelfList<GDScriptInstance> *elem = script->instances.first();
-				elem->self()->get_owner()->set_script(Variant());
+				Object *owner = elem->self()->get_owner();
+				// Destructing the instance releases its members. With a reference cycle between instances this may drop the last
+				// reference to the owner itself, which would then delete the very instance that is being destructed.
+				Ref<RefCounted> keep_alive;
+				if (owner->is_ref_counted()) {
+					keep_alive = Ref<RefCounted>(static_cast<RefCounted *>(owner));
+				}
+				owner->set_script(Variant());
 				ERR_BREAK_MSG(script->instances.first() == elem, "GDScript bug (please report): Detaching a script does not destruct instance.");
 			}
 		}
