@@ -303,6 +303,7 @@ void BaseButton::set_disabled(bool p_disabled) {
 		}
 		status.press_attempt = false;
 		status.pressing_inside = false;
+		status.touch_index = -1;
 		if (status.pressed_down_with_focus) {
 			status.pressed_down_with_focus = false;
 			emit_signal(SNAME("button_up"));
