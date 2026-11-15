@@ -181,9 +181,9 @@ Error AudioDriverCoreAudio::init() {
 	result = AudioUnitInitialize(audio_unit);
 	ERR_FAIL_COND_V(result != noErr, FAILED);
 
-	if (GLOBAL_GET("audio/driver/enable_input")) {
-		return init_input_device();
-	}
+	// The input unit is created in input_start() and disposed in input_stop(): with "audio/driver/enable_input" on but capture never
+	// started, start-up is the same as with it off (no input unit, no microphone permission prompt, and a failing input device
+	// cannot fail the whole driver).
 	return OK;
 }
 
@@ -569,8 +569,45 @@ void AudioDriverCoreAudio::finish_input_device() {
 	}
 }
 
+#ifndef MACOS_ENABLED
+// Capture needs an audio session that records. While it runs the session is play-and-record with playback still on the speaker,
+// Bluetooth A2DP and AirPlay outputs (the microphone is the device's own); when it stops, the category the session had before
+// (the project's, set at launch) comes back, so the app is playback-only outside capture.
+static void _set_input_session(bool p_recording) {
+	static AVAudioSessionCategory category_before = nil;
+	static AVAudioSessionCategoryOptions options_before = 0;
+
+	AVAudioSession *session = [AVAudioSession sharedInstance];
+	if (p_recording) {
+		category_before = session.category;
+		options_before = session.categoryOptions;
+		AVAudioSessionCategoryOptions options = AVAudioSessionCategoryOptionDefaultToSpeaker | AVAudioSessionCategoryOptionAllowBluetoothA2DP | AVAudioSessionCategoryOptionAllowAirPlay;
+		[session setCategory:AVAudioSessionCategoryPlayAndRecord withOptions:options | (options_before & AVAudioSessionCategoryOptionMixWithOthers) error:nil];
+	} else {
+		[session setCategory:category_before withOptions:options_before error:nil];
+	}
+}
+#endif
+
 Error AudioDriverCoreAudio::input_start() {
-	ERR_FAIL_NULL_V(input_unit, FAILED);
+	if (input_unit == nullptr) {
+#ifndef MACOS_ENABLED
+		_set_input_session(true);
+#endif
+		Error err = init_input_device();
+		if (err != OK) {
+			finish_input_device();
+#ifndef MACOS_ENABLED
+			_set_input_session(false);
+#endif
+			return err;
+		}
+#ifdef MACOS_ENABLED
+		if (input_device_name != "Default") {
+			_set_device(input_device_name, true);
+		}
+#endif
+	}
 
 	input_buffer_init(capture_buffer_frames);
 
@@ -588,6 +625,10 @@ Error AudioDriverCoreAudio::input_stop() {
 		if (result != noErr) {
 			ERR_PRINT("AudioOutputUnitStop failed, code: " + itos(result));
 		}
+		finish_input_device();
+#ifndef MACOS_ENABLED
+		_set_input_session(false);
+#endif
 	}
 
 	return OK;
@@ -764,7 +805,8 @@ String AudioDriverCoreAudio::get_input_device() {
 
 void AudioDriverCoreAudio::set_input_device(const String &p_name) {
 	input_device_name = p_name;
-	if (active) {
+	// Without an input unit (capture not started) the name is applied when input_start() creates it.
+	if (active && input_unit) {
 		_set_device(input_device_name, true);
 	}
 }

@@ -858,22 +858,44 @@ Rect2 OS_AppleEmbedded::calculate_boot_screen_rect(const Size2 &p_window_size, c
 	}
 }
 
+// Microphone permission: 1 granted, 0 denied, -1 not asked yet. AVAudioApplication is iOS 17+; older systems (the export targets
+// iOS 15) use the AVAudioSession API it replaced.
+static int _record_permission() {
+	if (@available(iOS 17.0, *)) {
+		AVAudioApplicationRecordPermission permission = [AVAudioApplication sharedInstance].recordPermission;
+		return permission == AVAudioApplicationRecordPermissionGranted ? 1 : (permission == AVAudioApplicationRecordPermissionDenied ? 0 : -1);
+	}
+#ifdef IOS_ENABLED
+	AVAudioSessionRecordPermission permission = [AVAudioSession sharedInstance].recordPermission;
+	return permission == AVAudioSessionRecordPermissionGranted ? 1 : (permission == AVAudioSessionRecordPermissionDenied ? 0 : -1);
+#else
+	return -1;
+#endif
+}
+
+// Returns true when the permission is already granted. Otherwise returns false and the answer always arrives through the main loop's
+// "on_request_permissions_result" signal, on the main thread: after the user answers the system prompt, or on the next main loop
+// turn when the permission was denied earlier (iOS does not ask twice; the app points the user to Settings).
 bool OS_AppleEmbedded::request_permission(const String &p_name) {
 	if (p_name == "appleembedded.permission.AUDIO_RECORD") {
-		if (@available(iOS 17.0, *)) {
-			AVAudioApplicationRecordPermission permission = [AVAudioApplication sharedInstance].recordPermission;
-			if (permission == AVAudioApplicationRecordPermissionGranted) {
-				// Permission already granted, you can start recording.
-				return true;
-			} else if (permission == AVAudioApplicationRecordPermissionDenied) {
-				// Permission denied, or not yet granted.
-				return false;
-			} else {
-				// Request the permission, but for now return false as documented.
-				[AVAudioApplication requestRecordPermissionWithCompletionHandler:^(BOOL granted) {
-					get_main_loop()->emit_signal(SNAME("on_request_permissions_result"), p_name, granted);
-				}];
-			}
+		int permission = _record_permission();
+		if (permission == 1) {
+			return true;
+		}
+		String name = p_name;
+		void (^answer)(BOOL) = ^(BOOL granted) {
+			dispatch_async(dispatch_get_main_queue(), ^{
+				OS::get_singleton()->get_main_loop()->emit_signal(SNAME("on_request_permissions_result"), name, (bool)granted);
+			});
+		};
+		if (permission == 0) {
+			answer(NO);
+		} else if (@available(iOS 17.0, *)) {
+			[AVAudioApplication requestRecordPermissionWithCompletionHandler:answer];
+		} else {
+#ifdef IOS_ENABLED
+			[[AVAudioSession sharedInstance] requestRecordPermission:answer];
+#endif
 		}
 	}
 	return false;
@@ -882,10 +904,8 @@ bool OS_AppleEmbedded::request_permission(const String &p_name) {
 Vector<String> OS_AppleEmbedded::get_granted_permissions() const {
 	Vector<String> ret;
 
-	if (@available(iOS 17.0, *)) {
-		if ([AVAudioApplication sharedInstance].recordPermission == AVAudioApplicationRecordPermissionGranted) {
-			ret.push_back("appleembedded.permission.AUDIO_RECORD");
-		}
+	if (_record_permission() == 1) {
+		ret.push_back("appleembedded.permission.AUDIO_RECORD");
 	}
 	return ret;
 }
