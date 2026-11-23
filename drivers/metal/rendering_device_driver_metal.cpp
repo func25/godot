@@ -222,6 +222,32 @@ static const MTL::TextureType TEXTURE_TYPE[RDD::TEXTURE_TYPE_MAX] = {
 	MTL::TextureTypeCubeArray,
 };
 
+// Metal swizzle for a texture or view of p_format: the view's swizzle composed with the format's own component mapping. A format
+// stored in a Metal pixel format of another component order (B5G6R5_UNORM_PACK16 in MTLPixelFormatB5G6R5Unorm, for example) only
+// reads back in its own order through that mapping.
+static MTL::TextureSwizzleChannels component_swizzle(const ComponentMapping &p_mapping, const RDD::TextureView &p_view) {
+	static const MTL::TextureSwizzle COMPONENT_SWIZZLE[RDD::TEXTURE_SWIZZLE_MAX] = {
+		static_cast<MTL::TextureSwizzle>(255), // IDENTITY
+		MTL::TextureSwizzleZero,
+		MTL::TextureSwizzleOne,
+		MTL::TextureSwizzleRed,
+		MTL::TextureSwizzleGreen,
+		MTL::TextureSwizzleBlue,
+		MTL::TextureSwizzleAlpha,
+	};
+	const RDD::TextureSwizzle view[4] = { p_view.swizzle_r, p_view.swizzle_g, p_view.swizzle_b, p_view.swizzle_a };
+	const RDD::TextureSwizzle format[4] = { p_mapping.r, p_mapping.g, p_mapping.b, p_mapping.a };
+	MTL::TextureSwizzle out[4];
+	for (int i = 0; i < 4; i++) {
+		RDD::TextureSwizzle s = view[i] == RDD::TEXTURE_SWIZZLE_IDENTITY ? RDD::TextureSwizzle(RDD::TEXTURE_SWIZZLE_R + i) : view[i];
+		if (s >= RDD::TEXTURE_SWIZZLE_R && format[s - RDD::TEXTURE_SWIZZLE_R] != RDD::TEXTURE_SWIZZLE_IDENTITY) {
+			s = format[s - RDD::TEXTURE_SWIZZLE_R];
+		}
+		out[i] = COMPONENT_SWIZZLE[s];
+	}
+	return MTL::TextureSwizzleChannels::Make(out[0], out[1], out[2], out[3]);
+}
+
 bool RenderingDeviceDriverMetal::is_valid_linear(TextureFormat const &p_format) const {
 	MTLFormatType ft = pixel_formats->getFormatType(p_format.format);
 
@@ -284,21 +310,7 @@ RDD::TextureID RenderingDeviceDriverMetal::texture_create(const TextureFormat &p
 		}
 	}
 
-	static const MTL::TextureSwizzle COMPONENT_SWIZZLE[TEXTURE_SWIZZLE_MAX] = {
-		static_cast<MTL::TextureSwizzle>(255), // IDENTITY
-		MTL::TextureSwizzleZero,
-		MTL::TextureSwizzleOne,
-		MTL::TextureSwizzleRed,
-		MTL::TextureSwizzleGreen,
-		MTL::TextureSwizzleBlue,
-		MTL::TextureSwizzleAlpha,
-	};
-
-	MTL::TextureSwizzleChannels swizzle = MTL::TextureSwizzleChannels::Make(
-			p_view.swizzle_r != TEXTURE_SWIZZLE_IDENTITY ? COMPONENT_SWIZZLE[p_view.swizzle_r] : MTL::TextureSwizzleRed,
-			p_view.swizzle_g != TEXTURE_SWIZZLE_IDENTITY ? COMPONENT_SWIZZLE[p_view.swizzle_g] : MTL::TextureSwizzleGreen,
-			p_view.swizzle_b != TEXTURE_SWIZZLE_IDENTITY ? COMPONENT_SWIZZLE[p_view.swizzle_b] : MTL::TextureSwizzleBlue,
-			p_view.swizzle_a != TEXTURE_SWIZZLE_IDENTITY ? COMPONENT_SWIZZLE[p_view.swizzle_a] : MTL::TextureSwizzleAlpha);
+	MTL::TextureSwizzleChannels swizzle = component_swizzle(formats.getComponentMapping(p_format.format), p_view);
 
 	// Represents a swizzle operation that is a no-op.
 	static MTL::TextureSwizzleChannels IDENTITY_SWIZZLE = MTL::TextureSwizzleChannels::Default();
@@ -450,19 +462,7 @@ RDD::TextureID RenderingDeviceDriverMetal::texture_create_shared(TextureID p_ori
 
 	MTL::PixelFormat format = (MTL::PixelFormat)pixel_formats->getMTLPixelFormat(p_view.format);
 
-	static const MTL::TextureSwizzle component_swizzle[TEXTURE_SWIZZLE_MAX] = {
-		static_cast<MTL::TextureSwizzle>(255), // IDENTITY
-		MTL::TextureSwizzleZero,
-		MTL::TextureSwizzleOne,
-		MTL::TextureSwizzleRed,
-		MTL::TextureSwizzleGreen,
-		MTL::TextureSwizzleBlue,
-		MTL::TextureSwizzleAlpha,
-	};
-
-#define SWIZZLE(C, CHAN) (p_view.swizzle_##C != TEXTURE_SWIZZLE_IDENTITY ? component_swizzle[p_view.swizzle_##C] : MTL::TextureSwizzle##CHAN)
-	MTL::TextureSwizzleChannels swizzle = MTL::TextureSwizzleChannels::Make(SWIZZLE(r, Red), SWIZZLE(g, Green), SWIZZLE(b, Blue), SWIZZLE(a, Alpha));
-#undef SWIZZLE
+	MTL::TextureSwizzleChannels swizzle = component_swizzle(pixel_formats->getComponentMapping(p_view.format), p_view);
 	MTL::Texture *obj = src_texture->newTextureView(format, src_texture->textureType(), NS::Range::Make(0, src_texture->mipmapLevelCount()), NS::Range::Make(0, slices), swizzle);
 	ERR_FAIL_NULL_V_MSG(obj, TextureID(), "Unable to create shared texture");
 	_track_resource(obj);
@@ -505,19 +505,7 @@ RDD::TextureID RenderingDeviceDriverMetal::texture_create_shared_from_slice(Text
 
 	MTL::PixelFormat format = (MTL::PixelFormat)pixel_formats->getMTLPixelFormat(p_view.format);
 
-	static const MTL::TextureSwizzle component_swizzle[TEXTURE_SWIZZLE_MAX] = {
-		static_cast<MTL::TextureSwizzle>(255), // IDENTITY
-		MTL::TextureSwizzleZero,
-		MTL::TextureSwizzleOne,
-		MTL::TextureSwizzleRed,
-		MTL::TextureSwizzleGreen,
-		MTL::TextureSwizzleBlue,
-		MTL::TextureSwizzleAlpha,
-	};
-
-#define SWIZZLE(C, CHAN) (p_view.swizzle_##C != TEXTURE_SWIZZLE_IDENTITY ? component_swizzle[p_view.swizzle_##C] : MTL::TextureSwizzle##CHAN)
-	MTL::TextureSwizzleChannels swizzle = MTL::TextureSwizzleChannels::Make(SWIZZLE(r, Red), SWIZZLE(g, Green), SWIZZLE(b, Blue), SWIZZLE(a, Alpha));
-#undef SWIZZLE
+	MTL::TextureSwizzleChannels swizzle = component_swizzle(pixel_formats->getComponentMapping(p_view.format), p_view);
 	MTL::Texture *obj = src_texture->newTextureView(format, textureType, NS::Range::Make(p_mipmap, p_mipmaps), NS::Range::Make(p_layer, p_layers), swizzle);
 	ERR_FAIL_NULL_V_MSG(obj, TextureID(), "Unable to create shared texture");
 	_track_resource(obj);

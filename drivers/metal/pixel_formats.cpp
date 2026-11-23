@@ -207,6 +207,10 @@ bool PixelFormats::needsSwizzle(DataFormat p_format) {
 	return getDataFormatDesc(p_format).needsSwizzle();
 }
 
+ComponentMapping PixelFormats::getComponentMapping(DataFormat p_format) {
+	return getDataFormatDesc(p_format).componentMapping;
+}
+
 MTLFmtCaps PixelFormats::getCapabilities(DataFormat p_format, bool p_extended) {
 	return getCapabilities(getDataFormatDesc(p_format).mtlPixelFormat, p_extended);
 }
