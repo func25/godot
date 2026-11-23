@@ -376,6 +376,9 @@ public:
 	/** Returns whether or not the specified Godot format requires swizzling to use with Metal. */
 	bool needsSwizzle(DataFormat p_format);
 
+	/** Returns the swizzle that presents the components of the specified Godot format in its own order from its Metal format. */
+	ComponentMapping getComponentMapping(DataFormat p_format);
+
 	/** Returns the Metal format capabilities supported by the specified Godot format, without substitution. */
 	MTLFmtCaps getCapabilities(DataFormat p_format, bool p_extended = false);
 
