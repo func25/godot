@@ -164,6 +164,10 @@ public:
 	virtual bool is_dark_mode() const override;
 	virtual void set_system_theme_change_callback(const Callable &p_callable) override;
 
+	virtual int accessibility_should_increase_contrast() const override;
+	virtual int accessibility_should_reduce_animation() const override;
+	virtual int accessibility_should_reduce_transparency() const override;
+
 	virtual Rect2i get_display_safe_area() const override;
 
 	virtual int get_screen_count() const override;
