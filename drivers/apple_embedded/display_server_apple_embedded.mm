@@ -468,6 +468,18 @@ void DisplayServerAppleEmbedded::set_system_theme_change_callback(const Callable
 	system_theme_changed = p_callable;
 }
 
+int DisplayServerAppleEmbedded::accessibility_should_increase_contrast() const {
+	return UIAccessibilityDarkerSystemColorsEnabled();
+}
+
+int DisplayServerAppleEmbedded::accessibility_should_reduce_animation() const {
+	return UIAccessibilityIsReduceMotionEnabled();
+}
+
+int DisplayServerAppleEmbedded::accessibility_should_reduce_transparency() const {
+	return UIAccessibilityIsReduceTransparencyEnabled();
+}
+
 void DisplayServerAppleEmbedded::emit_system_theme_changed() {
 	if (system_theme_changed.is_valid()) {
 		Variant ret;
